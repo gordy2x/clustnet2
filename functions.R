@@ -173,7 +173,7 @@ clust_lasso_gauss<-function(dat_mat,lambda,tau=Inf,beta_init=NULL,delta=1, weigh
     blank=matrix(NA,rows,rows)
     blank[lower.tri(blank)]=apply(apply(matrix(beta,nrow=rows),2,function(v) c(dist(v))),1,function(x) mean(abs(x)))
     blank[same_track]=NA
-    same=which(blank<0.01,arr.ind = TRUE)
+    same=which(blank<0.05,arr.ind = TRUE)
     same_track=unique(rbind(same_track,same))
     if(nrow(same)>0){
       # print(same)
@@ -298,31 +298,57 @@ same_clust<-function(betavec,cluster){
 
 dmpois<-function(y,betamat){
   p=length(y)
-  out=1
+  out=0
   for(i in 1:p){
-    out=out*dpois(y[i],lambda = exp(betamat[,i]))
+    out=out+dpois(y[i],lambda = exp(betamat[,i]),log = TRUE)
   }
-  out
+  exp(out)
 }
 
 
-mix_llik<-function(betavec,dat_mat){
-  ## work out pi from the dpois()
-  
-  ## for each y they sum to 1, then sum across cluster
+z_opt<-function(betavec,dat_mat){
+
   out=0
   rows=nrow(dat_mat)
   betamat=matrix(betavec,nrow=rows)
   clustermat=unique(betamat)
   
+  #should there be a loop here? 
+  #z depends on tau (2.9/2.22) which depends on z(2.10)
+  w=apply(dat_mat,1,dmpois,betamat=clustermat)
+  z=scale(w, center = FALSE, scale = colSums(w))#assumes tau is 1
+  tau=apply(z,1,sum)
   
-  
-  
-  for(i in 1:rows){
-    dim1=dpois(dat_mat[i,1],lambda = exp(betamat[,1]))
-    dim2=dpois(dat_mat[i,2],lambda = exp(betamat[,2]))
-    
-    out=out+log(sum(dim1*dim2/rows))
+  #is the even right?
+  eps=1e-5
+  delta=eps+1
+  while(delta>eps){
+    tauold=tau
+    znum=t(scale(t(w),center = FALSE,scale=1/tau))
+    z=scale(znum, center = FALSE, scale = colSums(znum))
+    tau=apply(z,1,sum)
+    delta=sum((tau-tauold)^2)
   }
-  out
+  z
+}
+
+EM<-function(betavec,dat_mat){
+  z=z_opt(betavec,dat_mat)
+  zlz=z*log(z)
+  -sum(zlz)
+}
+
+
+  
+mix_llik<-function(betavec,dat_mat){
+  rows=nrow(dat_mat)
+  betamat=matrix(betavec,nrow=rows)
+  clustermat=unique(betamat)
+  w=apply(dat_mat,1,dmpois,betamat=clustermat)
+  z=z_opt(betavec,dat_mat)
+  tau=apply(z,1,sum)
+  znum=t(scale(t(w),center = FALSE,scale=1/tau))
+  
+  sum(log(apply(znum,2,sum)))
+  
 }

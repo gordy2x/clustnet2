@@ -1,12 +1,12 @@
 # source("functions.R")
 
 # pdf("poisson_dat_compare.pdf")
-# set.seed(1)  #1 good
+set.seed(12)  #1 good
 neach=10
 means=expand.grid(rep=1:neach,mu1=c(2,15)*5,mu2=c(2,15))[,-1]
 dat=rpois(prod(dim(means)),lambda = as.matrix(means))
 dat_mat=matrix(dat,ncol=2)
-lambdas=seq(0.01,2,length.out = 30)
+lambdas=seq(0.01,4,length.out = 30)
 rows=nrow(dat_mat)
 # beta_out<-clust_path(dat_mat,lambdas,tau=Inf,weights=FALSE,poisson = TRUE)
 # plot_path_2d_alt(dat_mat,beta_out,title="Unweighted poisson")
@@ -18,22 +18,30 @@ rows=nrow(dat_mat)
 
 
 beta_out<-clust_path(dat_mat,lambdas,tau=Inf,weights=TRUE,poisson = TRUE)
-# plot_path_2d_alt(dat_mat,beta_out,title="Weighted poisson")
+plot_path_2d_alt(dat_mat,beta_out,title="Weighted poisson")
 # mse=apply(beta_out,2,function(x) sum((matrix(x,ncol=2)-log(means))^2))
 # right_cluster=apply(beta_out,2,same_clust,cluster=rep(1:4,each=10))
 lik=apply(beta_out,2,mix_llik,dat_mat=dat_mat)
+em=apply(beta_out,2,EM,dat_mat=dat_mat)
 clusters=apply(beta_out,2,function(x) unique(matrix(x,nrow=rows)))
 nclust=unlist(lapply(clusters, function(x) prod(dim(x))))
 bic=-2*lik+log(rows)*(nclust*2)
-plot_path_2d_alt(dat_mat,beta_out[,1:which(bic==min(bic))],
+icl=bic-em
+
+
+plot_path_2d_alt(dat_mat,beta_out[,1:which(bic==min(bic))[1]],
                  title="Weighted poisson bic")
+plot_path_2d_alt(dat_mat,beta_out[,1:which(icl==min(icl))[1]],
+                 title="Weighted poisson ICL")
 print(nclust[bic==min(bic)])
+print(nclust[icl==min(icl)])
 
 # plot(lambdas,mse,type="l")
 # plot(lambdas,right_cluster,type="l")
-plot(lambdas,-2*lik,type="l")
-plot(lambdas,bic,type="l")
-# 
+# plot(lambdas,-2*lik,type="l")
+# plot(lambdas,bic,type="l")
+# plot(lambdas,icl,type="l")
+# # 
 # plot_path_2d_alt(dat_mat,beta_out[,1:which(mse==min(mse))],title="Weighted poisson mse")
 # plot_path_2d_alt(dat_mat,beta_out[,1:which(right_cluster==min(right_cluster))[1]],title="Weighted poisson min good clust")
 
