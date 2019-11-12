@@ -4,6 +4,7 @@ library(tidyr)
 library(mvabund)
 library(ggplot2)
 library(prclust)
+library(fields)
 data("spider")
 
 
@@ -62,11 +63,12 @@ clust_lasso<-function(dat_mat,lambda,tau=Inf,beta_init=NULL,delta=1, weights=TRU
                                        map = mapArg, random = randomArg, profile = NULL, 
                                        silent = !verbose, DLL = "glmmTMB"))
   
+  
   if(is.null(beta_init)){
     beta_init=log(y+0.001)  
   }
   if(weights){
-    wi=dist(log(dat_mat+0.001))^2
+    wi=dist(log(dat_mat+0.001))
     w=1/wi
     w[wi==0]=0
     w=w/sum(w)*length(w)
@@ -82,39 +84,50 @@ clust_lasso<-function(dat_mat,lambda,tau=Inf,beta_init=NULL,delta=1, weights=TRU
   diff=eps+1
   beta=beta_init
   same_track=NULL
-  
+  pars=obj$par
   while(diff>eps){
     diffold=diff
     betaold=beta
     
-    blank=matrix(NA,rows,rows)
-    blank[lower.tri(blank)]=apply(apply(matrix(beta,nrow=rows),2,function(v) c(dist(v))),1,function(x) mean(abs(x)))   
-    blank[same_track]=NA
-    same=which(blank<0.01,arr.ind = TRUE)
-    same_track=unique(rbind(same_track,same))
-    if(nrow(same)>0){
-      # print(same)
-      beta=equalise(beta,same,rows)
-    }
+
+    # }
     
     
-    score=obj$gr(beta)
-    hess=obj$he(beta)
+    
+    
+    pars=c(beta)
+    score=obj$gr(pars)
+    hess=obj$he(pars)
     alam=a_lam(matrix(beta,nrow=rows),lambda,w=w,tau=tau)
     mbeta=matrix(beta,ncol=1)
-    hess=try(solve(hess+alam),silent = TRUE)
-    if(class(hess)!="try-error"){
-      beta=beta-delta*hess%*%(t(score)+alam%*%mbeta)
+    hess_inv=try(solve(hess+alam),silent = TRUE)
+    if(class(hess_inv)!="try-error"){
+      beta=beta-delta*hess_inv%*%(t(score)+alam%*%mbeta)
     } else {
-      beta=beta-delta*(t(score)+alam%*%mbeta)
+      beta=beta-delta*1/mean(diag(hess+alam))(t(score)+alam%*%mbeta)
     }
+    
+    
+    blank=matrix(NA,rows,rows)
+    blank[lower.tri(blank)]=apply(apply(matrix(beta,nrow=rows),2,function(v) c(dist(v))),1,function(x) sqrt(mean(x^2)))  
+    # print(sum(blank==0,na.rm=T))
+    # blank[same_track]=NA
+    # image.plot(blank)
+    same=which(blank<0.01,arr.ind = TRUE)
+    # same_track=unique(rbind(same_track,same))
+    beta=equalise(beta,same,rows)
+    # blank[lower.tri(blank)]=apply(apply(matrix(beta,nrow=rows),2,function(v) c(dist(v))),1,function(x) sqrt(mean(x^2))) 
+    # print(sum(blank==0,na.rm=T))
+    
     diff=max(abs(betaold-beta)/abs(beta))
     # print(diff)
     if(diff>diffold){
-      delta=delta/2
+      delta=delta*0.9
+      beta=betaold
     }
   }
   beta
+
 }
 
 
@@ -156,9 +169,9 @@ clust_lasso_gauss<-function(dat_mat,lambda,tau=Inf,beta_init=NULL,delta=1, weigh
   while(diff>eps){
     diffold=diff
     betaold=beta
-    
+
     blank=matrix(NA,rows,rows)
-    blank[lower.tri(blank)]=apply(apply(matrix(beta,nrow=rows),2,function(v) c(dist(v))),1,function(x) mean(abs(x)))   
+    blank[lower.tri(blank)]=apply(apply(matrix(beta,nrow=rows),2,function(v) c(dist(v))),1,function(x) mean(abs(x)))
     blank[same_track]=NA
     same=which(blank<0.01,arr.ind = TRUE)
     same_track=unique(rbind(same_track,same))
@@ -166,7 +179,7 @@ clust_lasso_gauss<-function(dat_mat,lambda,tau=Inf,beta_init=NULL,delta=1, weigh
       # print(same)
       beta=equalise(beta,same,rows)
     }
-    
+
     
     score=obj$gr(c(beta,1))
     last=length(score)
@@ -181,6 +194,9 @@ clust_lasso_gauss<-function(dat_mat,lambda,tau=Inf,beta_init=NULL,delta=1, weigh
     } else {
       beta=beta-delta*(t(t(score))+alam%*%mbeta)
     }
+
+    
+    
     diff=max(abs(betaold-beta)/abs(beta))
     # print(diff)
     if(diff>diffold){
@@ -227,10 +243,12 @@ plot_path_2d<-function(dat_mat,beta_out){
 plot_path_2d_alt<-function(dat_mat,beta_out,title=""){
   nsites=nrow(dat_mat)
   nspecies=ncol(dat_mat)
-  beta_plot=as.data.frame(beta_out)
+  y=c(dat_mat)
+  y_beta_out=cbind(log(y+0.01),beta_out)
+  beta_plot=as.data.frame(y_beta_out)
   beta_plot$species=rep(1:nspecies,each=nsites)
   beta_plot$sites=factor(rep(1:nsites,nspecies))
-  beta_plot=gather(beta_plot,lambda,beta,1:length(lambdas),factor_key=TRUE)
+  beta_plot=gather(beta_plot,lambda,beta,1:ncol(y_beta_out),factor_key=TRUE)
   beta_plot$lambda=factor(beta_plot$lambda)
   beta_plot=spread(beta_plot,species,beta,drop=FALSE)
   # beta_plot$lambda=rep(lambdas,nsites)
@@ -254,4 +272,57 @@ plot_path_1d<-function(dat_mat,beta_out){
   ggplot(beta_plot,aes(x=Y,y=exp(beta)))+
     geom_point(aes(color=lambda,group=lambda))+geom_path(aes(group=sites))+
     theme(legend.position = "none")
+}
+
+
+
+same_clust<-function(betavec,cluster){
+  out=0
+  rows=length(cluster)
+  betamat=matrix(betavec,nrow=rows)
+  for(i in 1:(rows-1)){
+    for(j in i:rows){
+      betadiff=dist(betamat[i,]-betamat[j,])
+      if((cluster[i]==cluster[j])&(betadiff>0)){
+        out=out+1
+      }
+      if((cluster[i]!=cluster[j])&(betadiff==0)){
+        out=out+1
+      }
+        
+    }
+  }
+  out
+  
+}
+
+dmpois<-function(y,betamat){
+  p=length(y)
+  out=1
+  for(i in 1:p){
+    out=out*dpois(y[i],lambda = exp(betamat[,i]))
+  }
+  out
+}
+
+
+mix_llik<-function(betavec,dat_mat){
+  ## work out pi from the dpois()
+  
+  ## for each y they sum to 1, then sum across cluster
+  out=0
+  rows=nrow(dat_mat)
+  betamat=matrix(betavec,nrow=rows)
+  clustermat=unique(betamat)
+  
+  
+  
+  
+  for(i in 1:rows){
+    dim1=dpois(dat_mat[i,1],lambda = exp(betamat[,1]))
+    dim2=dpois(dat_mat[i,2],lambda = exp(betamat[,2]))
+    
+    out=out+log(sum(dim1*dim2/rows))
+  }
+  out
 }
