@@ -1,12 +1,13 @@
-# source("functions.R")
+source("functions.R")
 
 # pdf("poisson_dat_compare.pdf")
-set.seed(12)  #1 good
-neach=10
-means=expand.grid(rep=1:neach,mu1=c(2,15)*5,mu2=c(2,15))[,-1]
-dat=rpois(prod(dim(means)),lambda = as.matrix(means))
-dat_mat=matrix(dat,ncol=2)
-lambdas=seq(0.01,4,length.out = 30)
+set.seed(1)  #1 good
+base=c(2,15)
+beta_in=log(expand.grid(base,2*base[1],3*base,4*base[1],5*base[2]))
+neach=rep(10,nrow(beta_in))
+dat=sim_pois(beta_in,neach)
+dat_mat=dat$Y
+rownames(dat_mat)=
 rows=nrow(dat_mat)
 # beta_out<-clust_path(dat_mat,lambdas,tau=Inf,weights=FALSE,poisson = TRUE)
 # plot_path_2d_alt(dat_mat,beta_out,title="Unweighted poisson")
@@ -14,27 +15,51 @@ rows=nrow(dat_mat)
 # 
 # beta_out<-clust_path(dat_mat,lambdas/20,tau=Inf,weights=FALSE,poisson = FALSE)
 # plot_path_2d_alt(dat_mat,beta_out,title="Unweighted gaussian log")
-
+lambdas=seq(0.01,3,length.out = 150)
 
 
 beta_out<-clust_path(dat_mat,lambdas,tau=Inf,weights=TRUE,poisson = TRUE)
-plot_path_2d_alt(dat_mat,beta_out,title="Weighted poisson")
-# mse=apply(beta_out,2,function(x) sum((matrix(x,ncol=2)-log(means))^2))
+plot_path_lat(dat_mat,beta_out,title="5 species 4 clusters")
+
+form_clust=create_merge(beta_out,dat_mat,lambdas)
+dend=as.dendrogram(form_clust)
+plot(dend)
+
+
+
+# plot_path_2d_alt(dat_mat,beta_out,title="Weighted poisson")
+# mse=apply(beta_out,2,function(x) sum((matrix(x,ncol=5)-log(means))^2))
 # right_cluster=apply(beta_out,2,same_clust,cluster=rep(1:4,each=10))
-lik=apply(beta_out,2,mix_llik,dat_mat=dat_mat)
-em=apply(beta_out,2,EM,dat_mat=dat_mat)
+# lik=apply(beta_out,2,mix_llik,dat_mat=dat_mat)
+# em=apply(beta_out,2,EM,dat_mat=dat_mat)
 clusters=apply(beta_out,2,function(x) unique(matrix(x,nrow=rows)))
-nclust=unlist(lapply(clusters, function(x) prod(dim(x))))
-bic=-2*lik+log(rows)*(nclust*2)
-icl=bic-em
+nclust=unlist(lapply(clusters, function(x) nrow(x)))
+# bic_pen=log(rows)*(nclust*cols)
+# bic=-2*lik+bic_pen
+# icl=bic-em
 
 
-plot_path_2d_alt(dat_mat,beta_out[,1:which(bic==min(bic))[1]],
-                 title="Weighted poisson bic")
-plot_path_2d_alt(dat_mat,beta_out[,1:which(icl==min(icl))[1]],
-                 title="Weighted poisson ICL")
-print(nclust[bic==min(bic)])
-print(nclust[icl==min(icl)])
+# plot_path_2d_alt(dat_mat,beta_out[,1:which(bic==min(bic))[1]],
+                 # title="Weighted poisson bic")
+# plot_path_2d_alt(dat_mat,beta_out[,1:which(icl==min(icl))[1]],
+#                  title="Weighted poisson ICL")
+# plot_path_2d_alt(dat_mat,beta_out[,1:which(right_cluster==min(right_cluster))[1]],
+#                  title="Weighted poisson clust")
+
+# print(nclust[bic==min(bic)])
+# print(nclust[icl==min(icl)])
+# 
+# betamat=matrix(beta_out[,which(icl==min(icl))[1]],nrow=rows)
+# image.plot(betamat)
+
+
+plot(nclust,bic,type="l",ylim=c(0,1000))
+lines(nclust,-2*lik,col="blue")
+lines(nclust,bic_pen,col="red")
+lines(nclust,mse*10,col="orange")
+lines(nclust,right_cluster*5,col="purple")
+
+
 
 # plot(lambdas,mse,type="l")
 # plot(lambdas,right_cluster,type="l")
@@ -139,3 +164,25 @@ print(nclust[icl==min(icl)])
 # # }
 # 
 # 
+
+
+
+
+set.seed(1)  #1 good
+base=c(2,15)
+beta_in=log(expand.grid(base,2*base[1],3*base,4*base[1],5*base[2]))
+neach=rep(2,nrow(beta_in))
+dat=sim_pois(beta_in,neach)
+dat_mat=dat$Y
+rows=nrow(dat_mat)
+# beta_out<-clust_path(dat_mat,lambdas,tau=Inf,weights=FALSE,poisson = TRUE)
+# plot_path_2d_alt(dat_mat,beta_out,title="Unweighted poisson")
+# 
+# 
+# beta_out<-clust_path(dat_mat,lambdas/20,tau=Inf,weights=FALSE,poisson = FALSE)
+# plot_path_2d_alt(dat_mat,beta_out,title="Unweighted gaussian log")
+lambdas=seq(0.01,9,length.out = 100)
+
+
+beta_out<-clust_path(dat_mat,lambdas,tau=Inf,weights=TRUE,poisson = TRUE)
+plot_path_lat(dat_mat,beta_out,title="5 species 4 clusters")
